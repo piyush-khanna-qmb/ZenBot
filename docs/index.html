@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pawse, the pomeranian that makes you take breaks</title>
+<meta name="description" content="A tiny open-source app for macOS and Windows. Every so often a real pomeranian blocks your screen, tells you to walk and drink water, asks if you are happy, and leaves.">
+<style>
+  :root {
+    --night: #171310;
+    --night-2: #221b15;
+    --parchment: #f3ead9;
+    --parchment-dim: #cfc2ab;
+    --gold: #e0a94e;
+    --coat: #b46a3c;
+    --tongue: #e98a9c;
+    --card: rgba(24, 19, 14, 0.72);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(90% 60% at 70% 0%, #2a2118 0%, transparent 60%),
+      var(--night);
+    color: var(--parchment);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--gold); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- header ---------- */
+  header.site {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 26px 0 0;
+  }
+  .brand { font-family: var(--serif); font-size: 22px; letter-spacing: 0.02em; }
+  .brand .paw { color: var(--gold); }
+  header.site nav a {
+    color: var(--parchment-dim); text-decoration: none; font-size: 14px; margin-left: 22px;
+  }
+  header.site nav a:hover { color: var(--parchment); }
+
+  /* ---------- hero demo ---------- */
+  .hero { padding: 44px 0 0; }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--gold); margin-bottom: 18px;
+  }
+  .demo {
+    position: relative; border-radius: 16px; overflow: hidden;
+    border: 1px solid #3a2f24;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+    aspect-ratio: 16 / 9.4;
+    background: #232733;
+  }
+  /* the "desktop" being interrupted */
+  .editor { position: absolute; inset: 0; padding: 14px 18px; font-family: var(--mono); font-size: clamp(9px, 1.35vw, 14px); line-height: 1.75; color: #9aa4bd; }
+  .editor .bar { display: flex; gap: 7px; margin-bottom: 12px; }
+  .editor .bar i { width: 11px; height: 11px; border-radius: 50%; background: #3d4356; }
+  .editor .k { color: #c792ea; } .editor .f { color: #82aaff; }
+  .editor .s { color: #c3e88d; } .editor .c { color: #546076; }
+  /* the break overlay that takes it over */
+  .break {
+    position: absolute; inset: 0;
+    background: rgba(9, 11, 16, 0.55);
+    opacity: 0; transition: opacity 0.7s ease;
+    pointer-events: none;
+  }
+  .break.on { opacity: 1; pointer-events: auto; }
+  .dogbox {
+    position: absolute; left: 50%; bottom: 5%;
+    height: 62%; aspect-ratio: 900 / 944;
+    transform: translateX(-50%) translateY(30px); opacity: 0;
+    transition: opacity 0.9s ease, transform 0.9s ease;
+    filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55));
+  }
+  .break.on .dogbox { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .dogbox canvas, .dogbox .fallback { width: 100%; height: 100%; }
+  .dogbox .fallback { display: none; font-size: 20vmin; text-align: center; }
+  .bubble {
+    position: absolute; left: 55%; bottom: 66%;
+    max-width: min(38%, 300px); padding: 11px 14px 10px;
+    background: rgba(15, 17, 24, 0.92);
+    border: 1px solid rgba(224, 169, 78, 0.42);
+    border-radius: 14px;
+    opacity: 0; transform: translateY(10px) scale(0.94);
+    transition: opacity 0.45s ease 0.5s, transform 0.45s ease 0.5s;
+  }
+  .break.on .bubble { opacity: 1; transform: none; }
+  .bubble::after, .bubble::before {
+    content: ""; position: absolute; border-radius: 50%;
+    background: rgba(15, 17, 24, 0.92); border: 1px solid rgba(224, 169, 78, 0.42);
+  }
+  .bubble::after { width: 14px; height: 14px; left: 18px; bottom: -22px; }
+  .bubble::before { width: 8px; height: 8px; left: 8px; bottom: -38px; }
+  .bubble h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(12px, 1.5vw, 17px); line-height: 1.32; min-height: 2.6em;
+  }
+  .bubble .row { display: flex; align-items: center; gap: 11px; margin-top: 7px; }
+  .ring { position: relative; width: 46px; height: 46px; flex: none; }
+  .ring svg { transform: rotate(-90deg); display: block; }
+  .ring circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+  .ring .bg { stroke: rgba(243,234,217,0.14); }
+  .ring .fg { stroke: var(--gold); stroke-dasharray: 276.46; }
+  .ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; }
+  .walkline { font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase; color: #c9a86a; }
+  .ask { display: none; gap: 8px; }
+  .ask button {
+    font: inherit; font-size: clamp(11px, 1.4vw, 14px); padding: 7px 14px; border-radius: 999px;
+    border: 1px solid rgba(224,169,78,0.55); background: rgba(224,169,78,0.12);
+    color: var(--parchment); cursor: pointer;
+  }
+  .ask button:hover { background: rgba(224,169,78,0.3); }
+  .esc {
+    position: absolute; top: 14px; right: 16px; font-family: var(--mono); font-size: 10.5px;
+    padding: 6px 11px; border-radius: 999px; letter-spacing: 0.05em;
+    background: rgba(12,13,17,0.85); border: 1px solid rgba(243,234,217,0.18);
+    color: var(--parchment-dim);
+  }
+  .esc kbd { border: 1px solid rgba(243,234,217,0.35); border-radius: 3px; padding: 0 4px; font-family: inherit; }
+  .replay {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    display: none; font: inherit; font-size: 14px; padding: 10px 22px; border-radius: 999px;
+    border: 1px solid rgba(224,169,78,0.55); background: rgba(15,17,24,0.9); color: var(--parchment);
+    cursor: pointer;
+  }
+  .heart { position: absolute; bottom: 40%; animation: rise 2.2s ease-out forwards; pointer-events: none; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px) } 15% { opacity: 1 } to { opacity: 0; transform: translateY(-90px) } }
+
+  /* ---------- headline ---------- */
+  .head { padding: 56px 0 8px; max-width: 720px; }
+  h1 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(34px, 5.6vw, 58px); line-height: 1.08; letter-spacing: -0.01em;
+  }
+  h1 em { font-style: italic; color: var(--gold); }
+  .head p { margin-top: 18px; font-size: clamp(16px, 2vw, 19px); color: var(--parchment-dim); max-width: 56ch; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+  .cta a {
+    text-decoration: none; font-size: 15px; padding: 12px 24px; border-radius: 999px;
+  }
+  .cta .primary { background: var(--gold); color: #241a0d; font-weight: 600; }
+  .cta .primary:hover { background: #edbd66; }
+  .cta .quiet { border: 1px solid #4a3c2c; color: var(--parchment); }
+  .cta .quiet:hover { border-color: var(--gold); }
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 26px 0 0; font-family: var(--mono); font-size: 12.5px; color: var(--parchment-dim); }
+  .facts span::before { content: "🐾 "; font-size: 10px; }
+
+  /* ---------- the break, beat by beat ---------- */
+  section.beats { padding: 72px 0 0; }
+  .sect-title { font-family: var(--serif); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin-bottom: 26px; }
+  .beatgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .beat {
+    background: var(--card); border: 1px solid #33291e; border-radius: 14px; padding: 18px;
+  }
+  .beat .n { font-family: var(--mono); color: var(--gold); font-size: 12px; }
+  .beat h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin: 8px 0 6px; }
+  .beat p { font-size: 13.5px; color: var(--parchment-dim); }
+
+  /* ---------- make it yours ---------- */
+  section.yours { padding: 72px 0 0; }
+  .knobs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .knob { border-left: 2px solid var(--coat); padding: 4px 0 4px 18px; }
+  .knob h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; }
+  .knob p { font-size: 14px; color: var(--parchment-dim); margin-top: 4px; }
+  .knob code { font-family: var(--mono); font-size: 12.5px; color: var(--gold); }
+
+  /* ---------- install ---------- */
+  section.install { padding: 72px 0; }
+  .installgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .method {
+    background: var(--card); border: 1px solid #33291e; border-radius: 14px; padding: 20px;
+  }
+  .method h3 { font-family: var(--serif); font-weight: 500; font-size: 19px; margin-bottom: 8px; }
+  .method p { font-size: 13.5px; color: var(--parchment-dim); margin-bottom: 12px; }
+  .method pre {
+    font-family: var(--mono); font-size: 12.5px; background: #100c09; border: 1px solid #2c231a;
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto; color: #e6d0a8;
+  }
+  .method a.dl { display: inline-block; margin-top: 4px; }
+
+  footer {
+    border-top: 1px solid #2c231a; padding: 26px 0 48px;
+    font-size: 13px; color: #8d7f6a;
+  }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 26px; justify-content: space-between; }
+  footer a { color: #b9a888; }
+
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  @media (max-width: 760px) {
+    .beatgrid, .knobs, .installgrid { grid-template-columns: 1fr; }
+    .bubble { left: 8%; max-width: 84%; }
+    .demo { aspect-ratio: 4 / 5; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="site">
+    <div class="brand"><span class="paw">🐾</span> Pawse</div>
+    <nav>
+      <a href="#install">Install</a>
+      <a href="https://github.com/piyush-khanna-qmb/pawse">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <p class="kicker">This page will be interrupted in a moment. That is the product.</p>
+    <div class="demo" id="demo">
+      <div class="editor" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div><span class="k">async fn</span> <span class="f">ship_it</span>(deadline: <span class="k">Tonight</span>) {</div>
+        <div>&nbsp;&nbsp;<span class="c">// hour four without standing up</span></div>
+        <div>&nbsp;&nbsp;<span class="k">let</span> water = <span class="s">"later"</span>;</div>
+        <div>&nbsp;&nbsp;<span class="k">let</span> walk = <span class="s">"after this function"</span>;</div>
+        <div>&nbsp;&nbsp;<span class="k">loop</span> {</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;keyboard.<span class="f">clatter</span>();</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;posture.<span class="f">degrade</span>();</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">// TODO: be a person</span></div>
+        <div>&nbsp;&nbsp;}</div>
+        <div>}</div>
+      </div>
+
+      <div class="break" id="break">
+        <div class="esc">hold <kbd>esc</kbd> to skip</div>
+        <div class="dogbox">
+          <canvas id="dogcanvas"></canvas>
+          <div class="fallback" id="dogfallback">🐕</div>
+        </div>
+        <div class="bubble">
+          <h2 id="line"></h2>
+          <div class="row">
+            <div class="ring" id="ringbox">
+              <svg viewBox="0 0 100 100" width="46" height="46">
+                <circle class="bg" cx="50" cy="50" r="44"/>
+                <circle class="fg" id="ringfg" cx="50" cy="50" r="44"/>
+              </svg>
+              <b id="count">10</b>
+            </div>
+            <span class="walkline">walk · water · breathe</span>
+            <div class="ask" id="ask">
+              <button id="yes" type="button">🐾 Yes!</button>
+              <button id="no" type="button">😔 Not really</button>
+            </div>
+          </div>
+        </div>
+        <button class="replay" id="replay" type="button">Take another break</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="head">
+    <h1>A pomeranian that <em>makes</em> you take breaks.</h1>
+    <p>Pawse sits in your menu bar and counts. Every 45 minutes, or whenever you say,
+       a real dog blocks every screen for 30 seconds, tells you to walk and drink water,
+       asks if you are happy, and leaves. You cannot argue with him. You can hold ESC.</p>
+    <div class="cta">
+      <a class="primary" href="https://github.com/piyush-khanna-qmb/pawse/releases">Download for macOS</a>
+      <a class="quiet" href="https://github.com/piyush-khanna-qmb/pawse/releases">Download for Windows</a>
+      <a class="quiet" href="https://github.com/piyush-khanna-qmb/pawse">Read the code</a>
+    </div>
+    <div class="facts">
+      <span>5.4 MB installer</span>
+      <span>zero network access</span>
+      <span>MIT, open source</span>
+      <span>real dog, really</span>
+    </div>
+  </section>
+
+  <section class="beats">
+    <h2 class="sect-title">How a break goes</h2>
+    <div class="beatgrid">
+      <div class="beat"><div class="n">1</div><h3>He arrives</h3>
+        <p>Your screens dim behind a translucent layer. A pomeranian fades in, sits, and stares at you. Your keyboard stops mattering.</p></div>
+      <div class="beat"><div class="n">2</div><h3>Thirty seconds</h3>
+        <p>The thought bubble says what he thinks: walk, water, breathe. A gold ring counts down. That is the whole job.</p></div>
+      <div class="beat"><div class="n">3</div><h3>One question</h3>
+        <p>"Are you happy?" Yes gets zoomies and hearts. Not really gets a head-tilt and a paw hug. Your answer stays on your machine.</p></div>
+      <div class="beat"><div class="n">4</div><h3>He leaves</h3>
+        <p>The overlay fades, your work is exactly where you left it, and the menu bar quietly schedules the next visit.</p></div>
+    </div>
+  </section>
+
+  <section class="yours">
+    <h2 class="sect-title">Make it yours</h2>
+    <div class="knobs">
+      <div class="knob"><h3>Your schedule</h3>
+        <p>Every <code>N</code> minutes, or fixed times like <code>10:30</code> and <code>15:00</code>. Pause for an hour from the tray when life happens.</p></div>
+      <div class="knob"><h3>Your words</h3>
+        <p>The bubble says whatever you write, one message per line, rotating. Default: <code>Hey Hooman, take a break</code>.</p></div>
+      <div class="knob"><h3>Your rules</h3>
+        <p>Break length, sound, launch at login. Hard mode turns the ESC escape hatch off entirely. Brave.</p></div>
+      <div class="knob"><h3>Your dog</h3>
+        <p>Film your own dog, run the two scripts in <code>scripts/</code>, drop three clips in a folder. Now it is your dog interrupting you.</p></div>
+    </div>
+  </section>
+
+  <section class="install" id="install">
+    <h2 class="sect-title">Install</h2>
+    <div class="installgrid">
+      <div class="method">
+        <h3>macOS</h3>
+        <p>Homebrew is the no-fuss path (Intel and Apple Silicon). It clears the download
+           quarantine for you, so you never see a warning.</p>
+        <pre>brew tap piyush-khanna-qmb/tap
+brew install --cask pawse</pre>
+        <p>Prefer the <a class="dl" href="https://github.com/piyush-khanna-qmb/pawse/releases/latest">universal DMG</a>?
+           If macOS says <em>"damaged"</em> (it means unsigned, not broken), run once:</p>
+        <pre>xattr -cr /Applications/Pawse.app</pre>
+      </div>
+      <div class="method">
+        <h3>Windows</h3>
+        <p>Download the installer and run it. If SmartScreen objects: More info, then Run anyway.</p>
+        <pre># from the releases page
+Pawse_x.y.z_x64-setup.exe</pre>
+        <a class="dl" href="https://github.com/piyush-khanna-qmb/pawse/releases/latest">go to releases</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MIT license. No telemetry, no accounts, no network. Just a dog.</span>
+    <span>Dog footage <a href="https://www.youtube.com/watch?v=EqsuyFGD_dw">CC-BY Free Stock Footage</a>, rehomed with love.
+      <a href="https://github.com/piyush-khanna-qmb/pawse">github.com/piyush-khanna-qmb/pawse</a></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var brk = document.getElementById('break');
+  var line = document.getElementById('line');
+  var count = document.getElementById('count');
+  var ringfg = document.getElementById('ringfg');
+  var ask = document.getElementById('ask');
+  var ringbox = document.getElementById('ringbox');
+  var replay = document.getElementById('replay');
+  var MSG = 'Hey Hooman, take a break, you have been working really hard 🐾';
+  var RING = 276.46;
+
+  // packed-alpha dog video: color left, alpha matte right, WebGL recomposite
+  var canvas = document.getElementById('dogcanvas');
+  var video = document.createElement('video');
+  video.muted = true; video.playsInline = true; video.loop = true;
+  video.setAttribute('playsinline', '');
+  var gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true });
+  var ok = false;
+  if (gl) {
+    var vs = 'attribute vec2 p;varying vec2 uv;void main(){uv=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}';
+    var fs = 'precision mediump float;varying vec2 uv;uniform sampler2D t;void main(){vec3 c=texture2D(t,vec2(uv.x*.5,uv.y)).rgb;float a=texture2D(t,vec2(.5+uv.x*.5,uv.y)).r;gl_FragColor=vec4(c,a);}';
+    var pr = gl.createProgram();
+    [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].forEach(function (d) {
+      var s = gl.createShader(d[0]); gl.shaderSource(s, d[1]); gl.compileShader(s); gl.attachShader(pr, s);
+    });
+    gl.linkProgram(pr); gl.useProgram(pr);
+    var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+    var lo = gl.getAttribLocation(pr, 'p');
+    gl.enableVertexAttribArray(lo); gl.vertexAttribPointer(lo, 2, gl.FLOAT, false, 0, 0);
+    var tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
+    [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D, p, gl.CLAMP_TO_EDGE); });
+    [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D, p, gl.LINEAR); });
+    ok = true;
+  }
+  function playClip(name, loop) {
+    if (!ok) return;
+    video.loop = loop; video.src = 'assets/' + name + '.mp4?v=4';
+    var p = video.play(); if (p && p.catch) p.catch(function () {});
+  }
+  function frame() {
+    if (ok && video.readyState >= 2 && video.videoWidth) {
+      var w = video.videoWidth / 2, h = video.videoHeight;
+      if (canvas.width !== w) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    requestAnimationFrame(frame);
+  }
+  video.addEventListener('error', function () {
+    ok = false; canvas.style.display = 'none';
+    document.getElementById('dogfallback').style.display = 'block';
+  });
+  requestAnimationFrame(frame);
+
+  function typewrite(el, text, done) {
+    if (reduced) { el.textContent = text; if (done) done(); return; }
+    el.textContent = ''; var i = 0;
+    (function tick() {
+      el.textContent = text.slice(0, ++i);
+      if (i < text.length) setTimeout(tick, 30); else if (done) done();
+    })();
+  }
+
+  function hearts() {
+    for (var i = 0; i < 8; i++) {
+      var h = document.createElement('div');
+      h.className = 'heart'; h.textContent = '💛';
+      h.style.left = (42 + (i % 5) * 4) + '%';
+      h.style.fontSize = (16 + (i % 3) * 7) + 'px';
+      h.style.animationDelay = (i % 4) * 0.2 + 's';
+      brk.appendChild(h);
+      setTimeout(function (el) { return function () { el.remove(); }; }(h), 2400);
+    }
+  }
+
+  var dogbox = brk.querySelector('.dogbox');
+  var bubble = brk.querySelector('.bubble');
+  var running = false, answered = false, autoTimer = null;
+
+  function runBreak() {
+    if (running) return; running = true; answered = false;
+    replay.style.display = 'none';
+    ask.style.display = 'none';
+    ringbox.style.display = '';
+    dogbox.style.visibility = ''; bubble.style.visibility = '';
+    ringfg.style.strokeDashoffset = 0;
+    playClip('idle', true);
+    brk.classList.add('on');
+    typewrite(line, MSG);
+    var total = 10, t0 = null;
+    count.textContent = total;
+    function tick(ts) {
+      if (!t0) t0 = ts;
+      var el = (ts - t0) / 1000;
+      var left = Math.max(0, Math.ceil(total - el));
+      count.textContent = left;
+      ringfg.style.strokeDashoffset = RING * Math.min(1, el / total);
+      if (left > 0) requestAnimationFrame(tick); else askPhase();
+    }
+    if (reduced) { setTimeout(askPhase, 1400); } else { requestAnimationFrame(tick); }
+  }
+  function askPhase() {
+    ringbox.style.display = 'none';
+    ask.style.display = 'flex';
+    typewrite(line, 'One more thing, are you happy?');
+    // if the visitor just watches, the dog answers for them
+    autoTimer = setTimeout(function () { react(true); }, 4200);
+  }
+  function react(happy) {
+    if (answered) return; answered = true;
+    clearTimeout(autoTimer);
+    ask.style.display = 'none';
+    if (happy) { playClip('happy', false); hearts(); typewrite(line, 'Yesss! Back to it 🐾'); }
+    else { playClip('sad', false); typewrite(line, 'Paw hug. Be kind to yourself 💛'); }
+    setTimeout(function () {
+      brk.classList.remove('on');
+      running = false;
+      setTimeout(function () {
+        dogbox.style.visibility = 'hidden'; bubble.style.visibility = 'hidden';
+        replay.style.display = 'block';
+        brk.classList.add('on');
+      }, 900);
+    }, 2600);
+  }
+  replay.addEventListener('click', function () {
+    brk.classList.remove('on'); running = false;
+    setTimeout(runBreak, 350);
+  });
+  document.getElementById('yes').addEventListener('click', function () { react(true); });
+  document.getElementById('no').addEventListener('click', function () { react(false); });
+
+  setTimeout(runBreak, 1600);
+})();
+</script>
+</body>
+</html>

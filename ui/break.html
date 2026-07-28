@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZenBot</title>
+  <link rel="stylesheet" href="break.css" />
+</head>
+<body class="no-cursor">
+  <canvas id="scene"></canvas>
+  <div id="grid" aria-hidden="true"></div>
+
+  <main id="ui">
+    <div id="panel">
+      <div class="hud-tag"><span id="assistant-name">ZENBOT</span> · ONLINE</div>
+      <h1 id="msg" aria-live="polite"></h1>
+      <p id="sub">walk · water · breathe</p>
+
+      <div id="panel-row">
+        <div id="ringwrap" class="hidden" aria-hidden="true">
+          <svg viewBox="0 0 100 100" width="72" height="72">
+            <circle class="ring-bg" cx="50" cy="50" r="44" />
+            <circle id="ringfg" class="ring-fg" cx="50" cy="50" r="44" />
+          </svg>
+          <div id="count">30</div>
+        </div>
+
+        <div id="offer" class="hidden interactive">
+          <button id="btn-eyes" type="button" class="glass-btn primary">◉ Begin eye-care · 1 min</button>
+          <button id="btn-skip-eyes" type="button" class="glass-btn">Not now</button>
+        </div>
+
+        <div id="ask" class="hidden interactive">
+          <button id="btn-happy" type="button" class="glass-btn">✦ Yes</button>
+          <button id="btn-meh" type="button" class="glass-btn">Not really</button>
+          <p class="hint">or press <kbd>Y</kbd> / <kbd>N</kbd></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Eye-exercise glass card deck -->
+  <div id="deck" class="hidden">
+    <div id="deck-head">
+      <span id="deck-progress">1 / 6</span>
+      <span id="deck-total" aria-live="polite">01:00</span>
+    </div>
+    <div id="cards" class="interactive"></div>
+    <div id="deck-hint">auto-advances · swipe or <kbd>←</kbd> <kbd>→</kbd> to skip</div>
+  </div>
+
+  <div id="skip-pill" class="hidden">
+    keep holding <kbd>esc</kbd> to skip
+    <div id="skip-bar"><div id="skip-fill"></div></div>
+  </div>
+
+  <script type="module" src="break.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZenBot Control Panel</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header>
+    <div class="brand">
+      <span class="logo"><span class="logo-core"></span></span>
+      <div>
+        <h1>ZenBot Control Panel</h1>
+        <p>your neural break &amp; eye-care assistant</p>
+      </div>
+    </div>
+    <div class="status">
+      <span id="statusLine">…</span>
+      <button id="pauseBtn" type="button" class="ghost">Pause 1h</button>
+      <button id="resumeBtn" type="button" class="ghost hidden">Resume</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Schedule</h2>
+      <label class="row">
+        <span>Break every</span>
+        <span class="unit"><input id="interval" type="number" min="1" max="720" /> minutes</span>
+      </label>
+      <div class="row col">
+        <span>…or at fixed times <em>(overrides the interval)</em></span>
+        <div class="times">
+          <div id="timesChips" class="chips"></div>
+          <input id="fixedTimeInput" type="time" />
+          <button id="addTime" type="button" class="ghost">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>The break</h2>
+      <label class="row">
+        <span>Break length</span>
+        <span class="unit"><input id="breakSeconds" type="number" min="5" max="600" /> seconds</span>
+      </label>
+      <label class="row col">
+        <span>Reminders <em>(one per line, rotates)</em></span>
+        <textarea id="messages" rows="3" spellcheck="false"></textarea>
+      </label>
+      <label class="row">
+        <span>Sound</span>
+        <input id="sound" type="checkbox" class="switch" />
+      </label>
+      <label class="row">
+        <span>Emergency escape <em>(hold ESC to skip, turn off for hard mode)</em></span>
+        <input id="allowEscape" type="checkbox" class="switch" />
+      </label>
+      <label class="row" id="escHoldRow">
+        <span>ESC hold time</span>
+        <span class="unit"><input id="escHold" type="number" min="1" max="10" /> seconds</span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Assistant</h2>
+      <label class="row">
+        <span>Name</span>
+        <input id="assistantName" type="text" maxlength="24" />
+      </label>
+      <p class="note">A pulsing neon core replaces the old mascot — it powers up on every break.</p>
+    </section>
+
+    <section class="card">
+      <h2>System</h2>
+      <label class="row">
+        <span>Launch at login</span>
+        <input id="autostart" type="checkbox" class="switch" />
+      </label>
+      <p class="note">ZenBot has no network access — everything stays on this device.</p>
+    </section>
+
+    <section class="card wide">
+      <h2>Eye care <span class="badge">1-minute break</span></h2>
+      <label class="row">
+        <span>Offer a guided eye-exercise break after each reminder</span>
+        <input id="eyeEnabled" type="checkbox" class="switch" />
+      </label>
+      <label class="row" id="eyeSecondsRow">
+        <span>Seconds per exercise card</span>
+        <span class="unit"><input id="eyeSeconds" type="number" min="3" max="120" /> seconds</span>
+      </label>
+      <label class="row col" id="eyeListRow">
+        <span>Exercises <em>(one per line, format: <code>Title | instruction</code>, they appear as swipeable cards)</em></span>
+        <textarea id="eyeExercises" rows="6" spellcheck="false"></textarea>
+      </label>
+    </section>
+
+    <section class="card wide">
+      <h2>Mood after breaks</h2>
+      <div id="moodStrip" class="mood-strip"></div>
+      <p id="moodSummary" class="note"></p>
+    </section>
+  </main>
+
+  <footer>
+    <button id="tryBreak" type="button" class="ghost">◉ Try a break now</button>
+    <span id="savedToast" class="toast"></span>
+    <button id="save" type="button" class="primary">Save</button>
+  </footer>
+
+  <script type="module" src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Permissions for all ZenBot windows","local":true,"windows":["*"],"permissions":["core:default","core:window:allow-close","core:window:allow-show","core:window:allow-set-focus"]}}
