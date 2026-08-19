@@ -32,8 +32,6 @@ function fill(s) {
   $('messages').value = s.messages.join('\n');
   $('sound').checked = s.sound;
   $('allowEscape').checked = s.allow_escape;
-  $('escHold').value = s.escape_hold_seconds;
-  $('escHoldRow').style.opacity = s.allow_escape ? 1 : 0.45;
   $('assistantName').value = s.assistant_name;
   $('eyeEnabled').checked = s.eye_exercises_enabled;
   $('eyeSeconds').value = s.eye_seconds_per_card;
@@ -49,7 +47,6 @@ function collect() {
     break_seconds: Math.max(5, parseInt($('breakSeconds').value, 10) || 30),
     messages: $('messages').value.split('\n').map((m) => m.trim()).filter(Boolean),
     allow_escape: $('allowEscape').checked,
-    escape_hold_seconds: Math.max(1, parseInt($('escHold').value, 10) || 3),
     sound: $('sound').checked,
     assistant_name: $('assistantName').value.trim() || 'ZenBot',
     eye_exercises_enabled: $('eyeEnabled').checked,
@@ -112,9 +109,6 @@ $('addTime').addEventListener('click', () => {
   }
 });
 
-$('allowEscape').addEventListener('change', (e) => {
-  $('escHoldRow').style.opacity = e.target.checked ? 1 : 0.45;
-});
 $('eyeEnabled').addEventListener('change', updateEyeState);
 
 $('save').addEventListener('click', async () => {

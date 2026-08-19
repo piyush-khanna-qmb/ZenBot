@@ -1,7 +1,7 @@
 // Break takeover screen. The primary monitor gets the ZenBot core (orb) + a glass
 // HUD: a water/stretch reminder, a countdown, an optional 1-minute eye-care deck,
 // then the "are you happy?" question. Secondary monitors get a quiet dim screen.
-// All input is swallowed except the ESC-hold escape hatch and the on-screen buttons.
+// All input is swallowed except the triple-ESC escape hatch and on-screen buttons.
 const invoke = window.__TAURI__.core.invoke;
 
 const $ = (id) => document.getElementById(id);
@@ -65,31 +65,34 @@ function typewriter(el, text, speed = 26) {
   tick();
 }
 
-// --- input swallowing + ESC-hold escape hatch ---
-let escDownAt = null;
-let escTimer = null;
+// --- input swallowing + triple-ESC escape hatch ---
+const ESC_TAP_WINDOW_MS = 1200;
+let escTaps = 0;
+let escResetTimer = null;
 
-function updateEscPill() {
-  if (escDownAt === null) return;
-  const held = (performance.now() - escDownAt) / 1000;
-  const frac = Math.min(1, held / info.settings.escape_hold_seconds);
-  $('skip-fill').style.width = `${frac * 100}%`;
-  if (frac >= 1) {
-    escDownAt = null;
-    clearInterval(escTimer);
-    leave(null); // skipped
+function registerEscTap() {
+  clearTimeout(escResetTimer);
+  escTaps += 1;
+  $('skip-pill').classList.remove('hidden');
+  $('skip-fill').style.width = `${(escTaps / 3) * 100}%`;
+  if (escTaps >= 3) {
+    escTaps = 0;
+    leave(null);
     return;
   }
-  $('skip-pill').classList.remove('hidden');
+  escResetTimer = setTimeout(() => {
+    escTaps = 0;
+    $('skip-fill').style.width = '0%';
+    $('skip-pill').classList.add('hidden');
+  }, ESC_TAP_WINDOW_MS);
 }
 
 function installInputGuards() {
   window.addEventListener(
     'keydown',
     (e) => {
-      if (e.key === 'Escape' && info.settings.allow_escape && !e.repeat && escDownAt === null) {
-        escDownAt = performance.now();
-        escTimer = setInterval(updateEscPill, 40);
+      if (e.key === 'Escape' && info.settings.allow_escape && !e.repeat) {
+        registerEscTap();
       }
       if (phase === 'exercise') {
         if (e.key === 'ArrowLeft') { e.preventDefault(); advanceCard(-1); return; }
@@ -105,18 +108,6 @@ function installInputGuards() {
     },
     true
   );
-  window.addEventListener(
-    'keyup',
-    (e) => {
-      if (e.key === 'Escape') {
-        escDownAt = null;
-        clearInterval(escTimer);
-        $('skip-fill').style.width = '0%';
-        $('skip-pill').classList.add('hidden');
-      }
-    },
-    true
-  );
   window.addEventListener('contextmenu', (e) => e.preventDefault(), true);
   window.addEventListener(
     'mousedown',
@@ -127,7 +118,7 @@ function installInputGuards() {
     setTimeout(() => {
       $('skip-pill').classList.remove('hidden');
       $('skip-fill').style.width = '0%';
-      setTimeout(() => { if (escDownAt === null) $('skip-pill').classList.add('hidden'); }, 2600);
+      setTimeout(() => { if (escTaps === 0) $('skip-pill').classList.add('hidden'); }, 2600);
     }, 1200);
   }
 }

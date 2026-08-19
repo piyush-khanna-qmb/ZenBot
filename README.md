@@ -35,7 +35,7 @@ in real time, no model files, no heavyweight 3D engine.
 4. ZenBot asks **"Are you happy?"** — **Yes** or **Not really**. Your answer is stored in
    a local mood log (visible in the Control Panel; it never leaves your machine).
 
-**Emergency escape:** hold <kbd>ESC</kbd> for 3 seconds to skip a break (in a meeting,
+**Emergency escape:** tap <kbd>ESC</kbd> three times to skip a break (in a meeting,
 on a call…). You can disable this in the Control Panel for hard mode. ZenBot deliberately
 does not fight OS-level force-quit — it's a break reminder, not a jail.
 
@@ -99,7 +99,7 @@ Open the **Control Panel** from the tray icon:
 | Break length | 30 s | The countdown |
 | Reminders | 3 built-ins | One per line; ZenBot rotates through them |
 | Sound | on | Soft synthesized chime + power-up (no audio files) |
-| Emergency escape | on | Hold ESC to skip; turn off for hard mode |
+| Emergency escape | on | Tap ESC 3 times to skip; turn off for hard mode |
 | Assistant name | ZenBot | The name shown on the HUD |
 | **Eye-care** | on | Offer a guided eye-exercise break after each reminder |
 | Seconds per card | 10 s | How long each exercise card holds before auto-advancing |

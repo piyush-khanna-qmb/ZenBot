@@ -32,7 +32,6 @@ struct Settings {
     break_seconds: u64,
     messages: Vec<String>,
     allow_escape: bool,
-    escape_hold_seconds: u64,
     sound: bool,
     /// The assistant's display name (Jarvis-style AI). Was `dog_name`.
     assistant_name: String,
@@ -53,7 +52,6 @@ impl Default for Settings {
             break_seconds: 30,
             messages: default_messages(),
             allow_escape: true,
-            escape_hold_seconds: 3,
             sound: true,
             assistant_name: "ZenBot".into(),
             eye_exercises_enabled: true,
@@ -78,7 +76,8 @@ fn default_eye_exercises() -> Vec<String> {
         "Palming | Rub your palms warm, cup them over closed eyes, and breathe slowly.".into(),
         "Slow blinking | Blink slowly and fully ten times to re-coat and refresh your eyes.".into(),
         "Figure eight | Trace a slow, lazy sideways figure-8 with your eyes.".into(),
-        "Near & far focus | Focus on your thumb up close, then a far point. Alternate slowly.".into(),
+        "Near & far focus | Focus on your thumb up close, then a far point. Alternate slowly."
+            .into(),
         "Eye rolls | Roll your eyes slowly clockwise, then counter-clockwise.".into(),
     ]
 }
@@ -87,7 +86,6 @@ impl Settings {
     fn sanitized(mut self) -> Self {
         self.interval_minutes = self.interval_minutes.clamp(1, 720);
         self.break_seconds = self.break_seconds.clamp(5, 600);
-        self.escape_hold_seconds = self.escape_hold_seconds.clamp(1, 10);
         self.eye_seconds_per_card = self.eye_seconds_per_card.clamp(3, 120);
         self.messages.retain(|m| !m.trim().is_empty());
         if self.messages.is_empty() {
@@ -206,44 +204,68 @@ fn start_break(app: &AppHandle) {
         let _ = cp.hide();
     }
 
-    // Take over the primary display only. One window is rock solid; covering every
-    // monitor was spawning stray/black overlays and stacked bubbles on secondary
-    // screens. (Multi-monitor coverage can return once it is verified on real hardware.)
-    let monitor = app
-        .primary_monitor()
-        .ok()
-        .flatten()
-        .or_else(|| app.available_monitors().ok().and_then(|v| v.into_iter().next()));
-    let monitor = match monitor {
-        Some(m) => m,
-        None => {
-            state.in_break.store(false, Ordering::SeqCst);
-            return;
+    let primary_monitor = app.primary_monitor().ok().flatten();
+    let primary_bounds = primary_monitor
+        .as_ref()
+        .map(|monitor| (*monitor.position(), *monitor.size()));
+    let mut monitors = app.available_monitors().unwrap_or_default();
+    if monitors.is_empty() {
+        if let Some(primary) = primary_monitor {
+            monitors.push(primary);
         }
-    };
+    }
+    monitors.sort_by_key(|monitor| {
+        let bounds = (*monitor.position(), *monitor.size());
+        if Some(bounds) == primary_bounds {
+            0
+        } else {
+            1
+        }
+    });
 
-    let built = WebviewWindowBuilder::new(app, "break-0", WebviewUrl::App("break.html".into()))
-        .title("ZenBot")
-        .decorations(false)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .closable(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .shadow(false)
-        .transparent(true)
-        .focused(true)
-        .build();
-    match built {
-        Ok(win) => {
-            let _ = win.set_position(tauri::Position::Physical(*monitor.position()));
-            let _ = win.set_size(tauri::Size::Physical(*monitor.size()));
-            #[cfg(target_os = "macos")]
-            raise_above_everything(&win);
-            let _ = win.set_focus();
+    // Windows must be hidden while their physical bounds are assigned. Letting the OS
+    // place a visible undecorated window first makes its initial monitor depend on the
+    // cursor, and moving it afterward can leave the webview viewport at that old origin.
+    let mut created = Vec::new();
+    for monitor in &monitors {
+        // The first window that is successfully created owns the interactive UI.
+        let index = created.len();
+        let label = format!("break-{index}");
+        let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("break.html".into()))
+            .title("ZenBot")
+            .decorations(false)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            .closable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .shadow(false)
+            .transparent(true)
+            .focused(index == 0)
+            .visible(false)
+            .build();
+        match built {
+            Ok(win) => {
+                let _ = win.set_size(tauri::Size::Physical(*monitor.size()));
+                let _ = win.set_position(tauri::Position::Physical(*monitor.position()));
+                #[cfg(target_os = "macos")]
+                raise_above_everything(&win);
+                created.push(win);
+            }
+            Err(e) => eprintln!("zenbot: failed to create {label}: {e}"),
         }
-        Err(e) => eprintln!("zenbot: failed to create break window: {e}"),
+    }
+
+    if created.is_empty() {
+        state.in_break.store(false, Ordering::SeqCst);
+        return;
+    }
+    for win in &created {
+        let _ = win.show();
+    }
+    if let Some(primary) = created.first() {
+        let _ = primary.set_focus();
     }
 }
 
