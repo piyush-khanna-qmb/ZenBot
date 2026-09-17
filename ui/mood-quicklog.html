@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mood Check-in</title>
+  <link rel="stylesheet" href="mood-quicklog.css" />
+</head>
+<body>
+  <div id="panel">
+    <div class="top-row">
+      <span class="hud-tag">Mood Check-in</span>
+      <button id="closeBtn" type="button" class="icon-btn" aria-label="Close">×</button>
+    </div>
+
+    <section id="phase-dump">
+      <div class="field">
+        <span class="label">Mood</span>
+        <div id="moodRow" class="pills"></div>
+      </div>
+
+      <div class="field">
+        <span class="label">Energy <em>(1 drained &middot; 5 wired)</em></span>
+        <div id="energyRow" class="pills severity"></div>
+      </div>
+
+      <div class="field">
+        <span class="label">Concentration <em>(1 scattered &middot; 5 laser-focused)</em></span>
+        <div id="concentrationRow" class="pills severity"></div>
+      </div>
+
+      <div class="field">
+        <span class="label">What's going on? <em>(optional — the more you write, the better the follow-ups)</em></span>
+        <textarea id="dumpText" rows="5" placeholder="dump it here…"></textarea>
+      </div>
+
+      <button id="submitBtn" type="button" class="glass-btn primary wide">Log it</button>
+    </section>
+
+    <section id="phase-followup" class="hidden">
+      <div id="followupContent"></div>
+      <button id="followupSave" type="button" class="glass-btn primary wide">Save</button>
+    </section>
+
+    <section id="phase-result" class="hidden">
+      <p id="resultLead" class="result-lead">Try this:</p>
+      <div id="suggestionCard" class="result-card hidden"></div>
+      <div id="reminderCards"></div>
+      <button id="doneBtn" type="button" class="glass-btn wide">Done</button>
+    </section>
+  </div>
+
+  <script type="module" src="mood-quicklog.js"></script>
+</body>
+</html>

@@ -160,7 +160,7 @@ body.no-cursor { cursor: none; }
   text-shadow: var(--glow);
 }
 
-#offer, #ask {
+#offer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -192,11 +192,44 @@ body.no-cursor { cursor: none; }
   box-shadow: 0 0 18px rgba(79, 227, 255, 0.3);
 }
 
-#ask .hint {
-  flex-basis: 100%;
-  font-size: 12px;
-  color: rgba(122, 200, 255, 0.6);
+#journal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(480px, 84vw);
+  pointer-events: auto;
 }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.pill {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  background: rgba(43, 140, 255, 0.12);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.pill:hover { background: rgba(79, 227, 255, 0.22); }
+.pill.active { border-color: var(--cyan); background: rgba(79, 227, 255, 0.32); box-shadow: var(--glow); }
+
+#journalText {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-line);
+  background: rgba(6, 14, 28, 0.55);
+  color: var(--ink);
+  resize: vertical;
+}
+#journalText::placeholder { color: rgba(206, 234, 255, 0.4); }
+.journal-actions { display: flex; gap: 12px; }
+
 kbd {
   font-family: inherit;
   border: 1px solid rgba(122, 200, 255, 0.4);

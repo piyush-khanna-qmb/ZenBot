@@ -1,18 +1,25 @@
 // Break takeover screen. The primary monitor gets the ZenBot core (orb) + a glass
 // HUD: a water/stretch reminder, a countdown, an optional 1-minute eye-care deck,
-// then the "are you happy?" question. Secondary monitors get a quiet dim screen.
-// All input is swallowed except the triple-ESC escape hatch and on-screen buttons.
+// then a mood/journal screen (orb fills toward "happy" as you write or pick a
+// mood pill). Secondary monitors get a quiet dim screen. All input is swallowed
+// except the triple-ESC escape hatch, on-screen buttons, and typing in the
+// journal textarea.
 const invoke = window.__TAURI__.core.invoke;
 
 const $ = (id) => document.getElementById(id);
 const RING_LEN = 276.46;
 
-let phase = 'enter'; // enter -> countdown -> offer -> exercise -> ask -> react
+let phase = 'enter'; // enter -> countdown -> offer -> exercise -> journal
 let info = null;
 let orb = null;
+let orbModes = null;
 let audio = null;
 let exercises = [];
 let perCardMs = 10000;
+
+const JOURNAL_MOODS = ['great', 'good', 'okay', 'low', 'foggy'];
+let journalMood = '';
+let journalMoodTouched = false;
 
 function sound(fn) {
   if (!info.settings.sound) return;
@@ -98,11 +105,8 @@ function installInputGuards() {
         if (e.key === 'ArrowLeft') { e.preventDefault(); advanceCard(-1); return; }
         if (e.key === 'ArrowRight') { e.preventDefault(); advanceCard(1); return; }
       }
-      if (phase === 'ask') {
-        const k = e.key.toLowerCase();
-        if (k === 'y') answer('happy');
-        if (k === 'n') answer('meh');
-      }
+      // Journal phase needs real typing in #journalText — don't swallow keys here.
+      if (phase === 'journal') return;
       // let modifier combos through; swallow the rest so nothing leaks to the desktop
       if (!e.metaKey && !e.ctrlKey) e.preventDefault();
     },
@@ -144,7 +148,7 @@ function startCountdown() {
     if (remaining <= 0) {
       clearInterval(timer);
       if (info.settings.eye_exercises_enabled && exercises.length) startOffer();
-      else startAsk();
+      else startJournal();
     }
   }, 100);
 }
@@ -160,8 +164,60 @@ function startOffer() {
   $('offer').classList.remove('hidden');
 }
 
-function startAsk() {
-  phase = 'ask';
+function renderJournalMoodRow() {
+  const box = $('journalMoodRow');
+  box.innerHTML = '';
+  for (const m of JOURNAL_MOODS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pill' + (journalMood === m ? ' active' : '');
+    b.textContent = m[0].toUpperCase() + m.slice(1);
+    b.addEventListener('click', () => {
+      journalMood = m;
+      journalMoodTouched = true;
+      renderJournalMoodRow();
+      updateOrbGlow();
+    });
+    box.appendChild(b);
+  }
+}
+
+function computeEngagement() {
+  const text = $('journalText').value || '';
+  const textScore = Math.min(1, text.trim().length / 150);
+  const moodScore = journalMoodTouched ? 0.3 : 0;
+  return Math.min(1, textScore * 0.7 + moodScore);
+}
+
+// Blends the orb from its neutral "ask" state toward the "happy" peak as
+// engagement with the journal increases — writing or picking a mood pill
+// visibly "fills" the orb up.
+function updateOrbGlow() {
+  if (!orb || !orbModes) return;
+  const base = orbModes.ask;
+  const peak = orbModes.happy;
+  const t = computeEngagement();
+  const lerp = (a, b) => a + (b - a) * t;
+  orb.setTarget({
+    energy: lerp(base.energy, peak.energy),
+    hue: lerp(base.hue, peak.hue),
+    glow: lerp(base.glow, peak.glow),
+    amp: lerp(base.amp, peak.amp),
+  });
+}
+
+// Maps the journal's own mood pill onto the legacy happy/meh break-mood
+// tracker (General tab's "Mood after breaks" strip) now that there's no
+// separate yes/no question feeding it.
+function legacyMoodFromJournal() {
+  if (!journalMoodTouched) return null;
+  return journalMood === 'great' || journalMood === 'good' ? 'happy' : 'meh';
+}
+
+function startJournal() {
+  phase = 'journal';
+  journalMood = '';
+  journalMoodTouched = false;
   orb?.setMode('ask');
   boot();
   document.body.classList.remove('no-cursor');
@@ -169,25 +225,43 @@ function startAsk() {
   $('panel').classList.add('show');
   $('ringwrap').classList.add('hidden');
   $('offer').classList.add('hidden');
-  typewriter($('msg'), `One more thing — are you happy?`);
-  $('sub').textContent = `${info.settings.assistant_name} wants to know`;
-  $('ask').classList.remove('hidden');
-}
+  $('journalText').value = '';
+  renderJournalMoodRow();
+  typewriter($('msg'), `One more thing — anything on your mind?`);
+  $('sub').textContent = 'optional, helps ZenBot understand you better';
+  $('journal').classList.remove('hidden');
 
-function answer(mood) {
-  if (phase !== 'ask') return;
-  phase = 'react';
-  $('ask').classList.add('hidden');
-  if (mood === 'happy') {
-    chimeDone();
-    orb?.setMode('happy');
-    typewriter($('msg'), `Noted. ${info.settings.assistant_name} is pleased — back to it. ✦`);
-  } else {
-    orb?.setMode('sad');
-    typewriter($('msg'), `Understood. Be kind to yourself — ${info.settings.assistant_name} has your back. ◇`);
-  }
-  $('sub').textContent = '';
-  setTimeout(() => leave(mood), 2800);
+  $('journalText').addEventListener('input', () => updateOrbGlow());
+
+  $('btn-journal-save').onclick = async () => {
+    const text = $('journalText').value.trim();
+    if (!text && !journalMoodTouched) {
+      $('journal').classList.add('hidden');
+      leave(null);
+      return;
+    }
+    await invoke('submit_journal_entry', {
+      entry: {
+        mood: journalMoodTouched ? journalMood : 'okay',
+        energy: 3,
+        concentration: 3,
+        text,
+        fog_suspected: journalMood === 'foggy',
+        fog_confirmed: false,
+        weather: '', food_timing: '', reason: '',
+        sleep_time: '', wake_time: '', sleep_hours: 0,
+        last_meal: '', last_caffeine: '',
+        severity: 3,
+        parsed_by: 'none',
+      },
+    });
+    $('journal').classList.add('hidden');
+    leave(legacyMoodFromJournal());
+  };
+  $('btn-journal-skip').onclick = () => {
+    $('journal').classList.add('hidden');
+    leave(null);
+  };
 }
 
 let leaving = false;
@@ -304,7 +378,7 @@ function finishDeck() {
   chimeDone();
   setTimeout(() => {
     $('deck').classList.add('hidden');
-    startAsk();
+    startJournal();
   }, 420);
 }
 
@@ -363,15 +437,14 @@ async function main() {
   $('assistant-name').textContent = (info.settings.assistant_name || 'ZenBot').toUpperCase();
   const mod = await import('./orb.js');
   orb = mod.createOrb($('scene'));
+  orbModes = mod.MODES;
   installDeckSwipe();
 
   // let the core materialize, then start the clock
   setTimeout(startCountdown, 1900);
 }
 
-$('btn-happy').addEventListener('click', () => answer('happy'));
-$('btn-meh').addEventListener('click', () => answer('meh'));
 $('btn-eyes').addEventListener('click', () => { if (phase === 'offer') startDeck(); });
-$('btn-skip-eyes').addEventListener('click', () => { if (phase === 'offer') startAsk(); });
+$('btn-skip-eyes').addEventListener('click', () => { if (phase === 'offer') startJournal(); });
 
 main();

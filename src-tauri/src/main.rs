@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod devnotes;
+mod fog;
+mod journal;
 mod schedule;
 
 use std::{
@@ -19,9 +22,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt as _;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -42,6 +46,12 @@ struct Settings {
     /// Seconds each exercise card stays before auto-advancing.
     eye_seconds_per_card: u64,
     autostart: bool,
+    #[serde(default)]
+    fog: fog::FogSettings,
+    #[serde(default)]
+    journal: journal::JournalSettings,
+    #[serde(default)]
+    devnotes: devnotes::DevNotesSettings,
 }
 
 impl Default for Settings {
@@ -58,6 +68,9 @@ impl Default for Settings {
             eye_exercises: default_eye_exercises(),
             eye_seconds_per_card: 10,
             autostart: false,
+            fog: fog::FogSettings::default(),
+            journal: journal::JournalSettings::default(),
+            devnotes: devnotes::DevNotesSettings::default(),
         }
     }
 }
@@ -100,6 +113,8 @@ impl Settings {
         if self.assistant_name.is_empty() {
             self.assistant_name = "ZenBot".into();
         }
+        self.fog = self.fog.sanitized();
+        self.journal = self.journal.sanitized();
         self
     }
 }
@@ -111,6 +126,7 @@ struct AppState {
     in_break: AtomicBool,
     msg_index: Mutex<usize>,
     current_message: Mutex<String>,
+    fog_suggestion_index: Mutex<usize>,
 }
 
 fn config_dir(app: &AppHandle) -> PathBuf {
@@ -128,6 +144,14 @@ fn settings_path(app: &AppHandle) -> PathBuf {
 
 fn moods_path(app: &AppHandle) -> PathBuf {
     config_dir(app).join("moods.jsonl")
+}
+
+fn fog_log_path(app: &AppHandle) -> PathBuf {
+    config_dir(app).join("fog_logs.jsonl")
+}
+
+fn journal_log_path(app: &AppHandle) -> PathBuf {
+    config_dir(app).join("journal_logs.jsonl")
 }
 
 fn load_settings(app: &AppHandle) -> Settings {
@@ -152,6 +176,30 @@ fn append_mood(app: &AppHandle, mood: &str) {
         .open(moods_path(app))
     {
         let _ = writeln!(f, "{entry}");
+    }
+}
+
+fn append_fog_log(app: &AppHandle, entry: &fog::FogLogEntry) {
+    if let Ok(json) = serde_json::to_string(entry) {
+        if let Ok(mut f) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(fog_log_path(app))
+        {
+            let _ = writeln!(f, "{json}");
+        }
+    }
+}
+
+fn append_journal_log(app: &AppHandle, entry: &journal::JournalEntry) {
+    if let Ok(json) = serde_json::to_string(entry) {
+        if let Ok(mut f) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(journal_log_path(app))
+        {
+            let _ = writeln!(f, "{json}");
+        }
     }
 }
 
@@ -301,6 +349,36 @@ fn open_settings(app: &AppHandle) {
         .build();
 }
 
+fn open_mood_quicklog(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("mood-quicklog") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        let _ = win.emit("mood-quicklog-reset", ());
+        return;
+    }
+    let built = WebviewWindowBuilder::new(app, "mood-quicklog", WebviewUrl::App("mood-quicklog.html".into()))
+        .title("Mood Check-in")
+        .inner_size(440.0, 700.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .center()
+        .focused(true)
+        .build();
+    match built {
+        Ok(win) => {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+        Err(e) => eprintln!("zenbot: failed to create mood-quicklog window: {e}"),
+    }
+}
+
 fn spawn_scheduler(app: AppHandle) {
     thread::spawn(move || loop {
         thread::sleep(StdDuration::from_secs(1));
@@ -360,7 +438,11 @@ fn get_settings(state: tauri::State<AppState>) -> Settings {
 
 #[tauri::command]
 fn save_settings(app: AppHandle, state: tauri::State<'_, AppState>, settings: Settings) {
-    let clean = settings.sanitized();
+    let mut clean = settings.sanitized();
+    // devnotes has its own dedicated persist commands (verify/set password, save notes),
+    // called independently of this one. Never let a general Settings save overwrite it
+    // with whatever possibly-stale copy the frontend's cache happened to hold.
+    clean.devnotes = state.settings.lock().unwrap().devnotes.clone();
     persist_settings(&app, &clean);
     let autolaunch = app.autolaunch();
     let _ = if clean.autostart {
@@ -368,6 +450,28 @@ fn save_settings(app: AppHandle, state: tauri::State<'_, AppState>, settings: Se
     } else {
         autolaunch.disable()
     };
+
+    let previous_shortcut = state.settings.lock().unwrap().fog.shortcut.clone();
+    if previous_shortcut != clean.fog.shortcut {
+        if let Ok(old) = previous_shortcut.parse::<Shortcut>() {
+            let _ = app.global_shortcut().unregister(old);
+        }
+        match clean.fog.shortcut.parse::<Shortcut>() {
+            Ok(new_shortcut) => {
+                if let Err(e) = app.global_shortcut().register(new_shortcut) {
+                    eprintln!(
+                        "zenbot: failed to register fog shortcut '{}': {e}",
+                        clean.fog.shortcut
+                    );
+                }
+            }
+            Err(e) => eprintln!(
+                "zenbot: could not parse fog shortcut '{}': {e}",
+                clean.fog.shortcut
+            ),
+        }
+    }
+
     *state.settings.lock().unwrap() = clean;
     if !state.in_break.load(Ordering::SeqCst) && state.paused_until.lock().unwrap().is_none() {
         reschedule(&app);
@@ -437,6 +541,138 @@ fn get_mood_log(app: AppHandle) -> Vec<serde_json::Value> {
         .unwrap_or_default()
 }
 
+#[tauri::command]
+fn submit_fog_log(
+    app: AppHandle,
+    state: tauri::State<AppState>,
+    entry: fog::FogLogEntry,
+) -> serde_json::Value {
+    let mut entry = entry;
+    entry.ts = Local::now().to_rfc3339();
+    append_fog_log(&app, &entry);
+
+    let settings = state.settings.lock().unwrap().clone();
+    let reminders = fog::active_reminders(&settings.fog.things_to_try);
+    let suggestion = {
+        let mut idx = state.fog_suggestion_index.lock().unwrap();
+        let pick = fog::pick_suggestion(&settings.fog.things_to_try, *idx);
+        *idx = idx.wrapping_add(1);
+        pick
+    };
+    serde_json::json!({ "suggestion": suggestion, "reminders": reminders })
+}
+
+#[tauri::command]
+fn get_fog_log(app: AppHandle) -> Vec<serde_json::Value> {
+    fs::read_to_string(fog_log_path(&app))
+        .map(|content| {
+            let entries: Vec<serde_json::Value> = content
+                .lines()
+                .filter_map(|l| serde_json::from_str(l).ok())
+                .collect();
+            let skip = entries.len().saturating_sub(1000);
+            entries.into_iter().skip(skip).collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn dismiss_mood_quicklog(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("mood-quicklog") {
+        let _ = win.hide();
+    }
+}
+
+#[tauri::command]
+fn open_mood_log_now(app: AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || open_mood_quicklog(&handle));
+}
+
+#[tauri::command]
+async fn parse_journal_draft(
+    state: tauri::State<'_, AppState>,
+    text: String,
+) -> Result<journal::ParsedDraft, ()> {
+    let settings = state.settings.lock().unwrap().journal.clone();
+    Ok(journal::parse_draft(&settings, &text).await)
+}
+
+#[tauri::command]
+fn submit_journal_entry(app: AppHandle, state: tauri::State<AppState>, entry: journal::JournalEntry) -> serde_json::Value {
+    let mut entry = entry;
+    entry.ts = Local::now().to_rfc3339();
+    append_journal_log(&app, &entry);
+
+    if entry.fog_confirmed {
+        append_fog_log(&app, &entry.to_fog_log());
+    }
+
+    // Lets any open window (Control Panel's Journal/Patterns tabs) refresh live
+    // instead of only picking up new entries on next open.
+    let _ = app.emit("journal-updated", ());
+
+    if entry.fog_confirmed || entry.mood == "low" || entry.mood == "foggy" {
+        let settings = state.settings.lock().unwrap().clone();
+        let reminders = fog::active_reminders(&settings.fog.things_to_try);
+        let suggestion = {
+            let mut idx = state.fog_suggestion_index.lock().unwrap();
+            let pick = fog::pick_suggestion(&settings.fog.things_to_try, *idx);
+            *idx = idx.wrapping_add(1);
+            pick
+        };
+        serde_json::json!({ "suggestion": suggestion, "reminders": reminders })
+    } else {
+        serde_json::json!({ "suggestion": null, "reminders": [] })
+    }
+}
+
+#[tauri::command]
+fn get_journal_log(app: AppHandle) -> Vec<serde_json::Value> {
+    fs::read_to_string(journal_log_path(&app))
+        .map(|content| {
+            let entries: Vec<serde_json::Value> = content
+                .lines()
+                .filter_map(|l| serde_json::from_str(l).ok())
+                .collect();
+            let skip = entries.len().saturating_sub(1000);
+            entries.into_iter().skip(skip).collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn verify_devnotes_password(state: tauri::State<AppState>, password: String) -> bool {
+    let hash = state.settings.lock().unwrap().devnotes.password_hash.clone();
+    devnotes::verify_password(&password, &hash)
+}
+
+#[tauri::command]
+fn devnotes_password_is_set(state: tauri::State<AppState>) -> bool {
+    !state.settings.lock().unwrap().devnotes.password_hash.is_empty()
+}
+
+#[tauri::command]
+fn set_devnotes_password(app: AppHandle, state: tauri::State<AppState>, password: String) {
+    let mut settings = state.settings.lock().unwrap().clone();
+    settings.devnotes.password_hash = devnotes::hash_password(&password);
+    persist_settings(&app, &settings);
+    *state.settings.lock().unwrap() = settings;
+}
+
+#[tauri::command]
+fn save_dev_notes(app: AppHandle, state: tauri::State<AppState>, notes: String) {
+    let mut settings = state.settings.lock().unwrap().clone();
+    settings.devnotes.notes = notes;
+    persist_settings(&app, &settings);
+    *state.settings.lock().unwrap() = settings;
+}
+
+#[tauri::command]
+fn get_dev_sessions() -> Vec<devnotes::DevSession> {
+    devnotes::dev_sessions()
+}
+
 // ---------------------------------------------------------------------------
 
 fn main() {
@@ -448,6 +684,16 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        let handle = app.clone();
+                        let _ = app.run_on_main_thread(move || open_mood_quicklog(&handle));
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             get_settings,
             save_settings,
@@ -459,6 +705,18 @@ fn main() {
             pause_breaks,
             resume_breaks,
             get_mood_log,
+            submit_fog_log,
+            get_fog_log,
+            dismiss_mood_quicklog,
+            open_mood_log_now,
+            parse_journal_draft,
+            submit_journal_entry,
+            get_journal_log,
+            verify_devnotes_password,
+            devnotes_password_is_set,
+            set_devnotes_password,
+            save_dev_notes,
+            get_dev_sessions,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -470,6 +728,20 @@ fn main() {
             if first_run {
                 persist_settings(&handle, &settings);
             }
+            if let Ok(shortcut) = settings.fog.shortcut.parse::<Shortcut>() {
+                if let Err(e) = app.global_shortcut().register(shortcut) {
+                    eprintln!(
+                        "zenbot: failed to register fog shortcut '{}': {e}",
+                        settings.fog.shortcut
+                    );
+                }
+            } else {
+                eprintln!(
+                    "zenbot: could not parse fog shortcut '{}'",
+                    settings.fog.shortcut
+                );
+            }
+
             app.manage(AppState {
                 settings: Mutex::new(settings),
                 next_break: Mutex::new(None),
@@ -477,6 +749,7 @@ fn main() {
                 in_break: AtomicBool::new(false),
                 msg_index: Mutex::new(0),
                 current_message: Mutex::new(String::new()),
+                fog_suggestion_index: Mutex::new(0),
             });
 
             let menu = Menu::with_items(
@@ -486,6 +759,8 @@ fn main() {
                     &PredefinedMenuItem::separator(app)?,
                     &MenuItem::with_id(app, "pause_1h", "Pause for 1 hour", true, None::<&str>)?,
                     &MenuItem::with_id(app, "resume", "Resume breaks", true, None::<&str>)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(app, "log_mood", "Log Mood", true, None::<&str>)?,
                     &PredefinedMenuItem::separator(app)?,
                     &MenuItem::with_id(app, "settings", "Open Control Panel", true, None::<&str>)?,
                     &MenuItem::with_id(app, "quit", "Quit ZenBot", true, None::<&str>)?,
@@ -509,6 +784,10 @@ fn main() {
                         let state = app.state::<AppState>();
                         *state.paused_until.lock().unwrap() =
                             Some(Local::now() + Duration::minutes(60));
+                    }
+                    "log_mood" => {
+                        let handle = app.clone();
+                        let _ = app.run_on_main_thread(move || open_mood_quicklog(&handle));
                     }
                     "resume" => {
                         let state = app.state::<AppState>();

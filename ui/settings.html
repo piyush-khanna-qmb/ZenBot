@@ -24,6 +24,16 @@
     </div>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button class="tab active" type="button" data-tab="general" role="tab">General</button>
+    <button class="tab" type="button" data-tab="things" role="tab">Things to Try</button>
+    <button class="tab" type="button" data-tab="mindfulness" role="tab">Mindfulness</button>
+    <button class="tab" type="button" data-tab="patterns" role="tab">Patterns</button>
+    <button class="tab" type="button" data-tab="journal" role="tab">Journal</button>
+    <button class="tab" type="button" data-tab="devnotes" role="tab">Dev Notes</button>
+  </nav>
+
+  <div id="panel-general" class="tab-panel active">
   <main>
     <section class="card">
       <h2>Schedule</h2>
@@ -76,7 +86,20 @@
         <span>Launch at login</span>
         <input id="autostart" type="checkbox" class="switch" />
       </label>
-      <p class="note">ZenBot has no network access — everything stays on this device.</p>
+      <p class="note">Break reminders, Things to Try, Mindfulness, and Patterns all stay fully on-device. Journal parsing is the one exception — see "Journal AI" below.</p>
+    </section>
+
+    <section class="card wide">
+      <h2>Journal AI <span class="badge">temporary, see Patterns tab note</span></h2>
+      <label class="row">
+        <span>Use AI to parse journal dumps</span>
+        <input id="journalAiEnabled" type="checkbox" class="switch" />
+      </label>
+      <label class="row col">
+        <span>Anthropic API key <em>(blank = falls back to local keyword matching, fully offline)</em></span>
+        <input id="journalApiKey" type="password" placeholder="sk-ant-…" />
+      </label>
+      <p class="note">When a key is set, your journal entry text is sent to Anthropic's Claude API to detect mood/energy/fog signals. Nothing else in ZenBot leaves this device. Planned to be replaced by a fully local model once enough entries are collected — see the Nov 1 reminder.</p>
     </section>
 
     <section class="card wide">
@@ -101,6 +124,13 @@
       <p id="moodSummary" class="note"></p>
     </section>
   </main>
+  </div>
+
+  <div id="panel-things" class="tab-panel"></div>
+  <div id="panel-mindfulness" class="tab-panel"></div>
+  <div id="panel-patterns" class="tab-panel"></div>
+  <div id="panel-journal" class="tab-panel"></div>
+  <div id="panel-devnotes" class="tab-panel"></div>
 
   <footer>
     <button id="tryBreak" type="button" class="ghost">◉ Try a break now</button>

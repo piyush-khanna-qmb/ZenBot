@@ -2,6 +2,7 @@ const invoke = window.__TAURI__.core.invoke;
 const $ = (id) => document.getElementById(id);
 
 let fixedTimes = [];
+let fogSettings = null; // populated in fill(), mutated in-place by tab modules, saved via the main Save button
 
 function renderChips() {
   const box = $('timesChips');
@@ -38,6 +39,9 @@ function fill(s) {
   $('eyeExercises').value = s.eye_exercises.join('\n');
   updateEyeState();
   $('autostart').checked = s.autostart;
+  fogSettings = s.fog;
+  $('journalAiEnabled').checked = s.journal.ai_enabled;
+  $('journalApiKey').value = s.journal.api_key;
 }
 
 function collect() {
@@ -53,6 +57,11 @@ function collect() {
     eye_seconds_per_card: Math.max(3, parseInt($('eyeSeconds').value, 10) || 10),
     eye_exercises: $('eyeExercises').value.split('\n').map((m) => m.trim()).filter(Boolean),
     autostart: $('autostart').checked,
+    fog: fogSettings,
+    journal: {
+      ai_enabled: $('journalAiEnabled').checked,
+      api_key: $('journalApiKey').value.trim(),
+    },
   };
 }
 
@@ -129,6 +138,26 @@ $('resumeBtn').addEventListener('click', async () => {
   await invoke('resume_breaks');
   refreshStatus();
 });
+
+// --- tabs ---
+const tabModules = {};
+
+async function activateTab(name) {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${name}`));
+  if (name === 'general') return;
+  if (!tabModules[name]) {
+    const mod = await import(`./tab-${name}.js`);
+    tabModules[name] = mod;
+    await mod.init($(`panel-${name}`), fogSettings);
+  } else {
+    tabModules[name].onShow?.();
+  }
+}
+
+document.querySelectorAll('.tab').forEach((b) =>
+  b.addEventListener('click', () => activateTab(b.dataset.tab))
+);
 
 async function main() {
   fill(await invoke('get_settings'));

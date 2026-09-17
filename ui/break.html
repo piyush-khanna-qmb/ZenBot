@@ -30,10 +30,14 @@
           <button id="btn-skip-eyes" type="button" class="glass-btn">Not now</button>
         </div>
 
-        <div id="ask" class="hidden interactive">
-          <button id="btn-happy" type="button" class="glass-btn">✦ Yes</button>
-          <button id="btn-meh" type="button" class="glass-btn">Not really</button>
-          <p class="hint">or press <kbd>Y</kbd> / <kbd>N</kbd></p>
+      </div>
+
+      <div id="journal" class="hidden interactive">
+        <div id="journalMoodRow" class="pills"></div>
+        <textarea id="journalText" rows="3" placeholder="dump your thoughts here… (optional)"></textarea>
+        <div class="journal-actions">
+          <button id="btn-journal-save" type="button" class="glass-btn primary">Log it</button>
+          <button id="btn-journal-skip" type="button" class="glass-btn">Skip</button>
         </div>
       </div>
     </div>

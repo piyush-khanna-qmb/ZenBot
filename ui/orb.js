@@ -167,7 +167,7 @@ void main(){
 
 // Per-mode uniform targets, lerped every frame so transitions feel alive.
 // hue is a 0..1 fraction (0.5 == cyan / 180°).
-const MODES = {
+export const MODES = {
   enter:    { energy: 0.45, hue: 0.528, glow: 0.6, amp: 0.75 },
   idle:     { energy: 0.75, hue: 0.531, glow: 0.95, amp: 1.0 },
   ask:      { energy: 1.05, hue: 0.520, glow: 1.1, amp: 1.1 },
@@ -223,6 +223,13 @@ export class Orb {
 
   setMode(mode) {
     if (MODES[mode]) this.tgt = { ...MODES[mode] };
+  }
+
+  // Sets an arbitrary {energy,hue,glow,amp} target directly — used to blend
+  // continuously between two modes (e.g. "fill up" as the journal fills in)
+  // rather than jumping straight to a named preset.
+  setTarget(target) {
+    this.tgt = { ...target };
   }
 
   _resize() {
